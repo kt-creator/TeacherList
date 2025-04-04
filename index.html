@@ -157,14 +157,16 @@
 
     function updateCounts() {
       events.forEach((_, i) => {
-        const selects = document.querySelectorAll(`tbody td:nth-child(${i + 2}) select`);
-        let yes = 0, no = 0;
-        selects.forEach(select => {
-          if (select.value === "○") yes++;
-          if (select.value === "✕") no++;
-        });
-        document.getElementById(`countYes${i}`).textContent = yes;
-        document.getElementById(`countNo${i}`).textContent = no;
+    const selects = document.querySelectorAll(`tbody td:nth-child(${i + 2}) select`);
+    let yes = 0, maybe = 0, no = 0;
+    selects.forEach(select => {
+      if (select.value === "○") yes++;
+      else if (select.value === "△") maybe++;
+      else if (select.value === "✕") no++;
+    });
+    document.getElementById(`countYes${i}`).textContent = yes;
+    document.getElementById(`countMaybe${i}`).textContent = maybe;
+    document.getElementById(`countNo${i}`).textContent = no;
       });
     }
 
