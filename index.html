@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>教員出欠WEB</title>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #aaa;
+      padding: 5px;
+      text-align: center;
+    }
+    input, select, textarea {
+      width: 100%;
+    }
+    textarea {
+      height: 60px;
+    }
+    .notice {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>教員出欠欄</h1>
+  <table id="attendanceTable">
+    <thead>
+      <tr>
+        <th>名前 \ イベント</th>
+        <!-- イベント名入力欄 -->
+        <script>
+          for (let j = 0; j < 10; j++) {
+            document.write(`<th><input type="text" id="event-${j}" onchange="saveHeader(${j})"></th>`);
+          }
+        </script>
+      </tr>
+    </thead>
+    <tbody>
+      <script>
+        for (let i = 0; i < 30; i++) {
+          document.write(`<tr><td><input type="text" id="name-${i}" onchange="saveRowName(${i})"></td>`);
+          for (let j = 0; j < 10; j++) {
+            document.write(`
+              <td>
+                <select id="cell-${i}-${j}" onchange="saveCell(${i}, ${j})">
+                  <option value=""></option>
+                  <option value="○">○</option>
+                  <option value="△">△</option>
+                  <option value="✕">✕</option>
+                </select>
+              </td>`);
+          }
+          document.write('</tr>');
+        }
+      </script>
+    </tbody>
+  </table>
+
+  <div class="notice">
+    <h3>お知らせ欄</h3>
+    <textarea id="notice" onchange="saveNotice()"></textarea>
+  </div>
+
+  <!-- Firebase 読み込みと初期化 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+    import { getDatabase, ref, set, get, onValue } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD9OakYyH-ONyGRvkPbVzxODrg4lyWcKq4",
+      authDomain: "teacherlist-dfac5.firebaseapp.com",
+      databaseURL: "https://teacherlist-dfac5-default-rtdb.firebaseio.com",
+      projectId: "teacherlist-dfac5",
+      storageBucket: "teacherlist-dfac5.appspot.com",
+      messagingSenderId: "504608468919",
+      appId: "1:504608468919:web:a9499106714e9f23c2c232"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    function saveCell(i, j) {
+      const val = document.getElementById(`cell-${i}-${j}`).value;
+      set(ref(db, `attendance/${i}/${j}`), val);
+    }
+
+    function saveRowName(i) {
+      const name = document.getElementById(`name-${i}`).value;
+      set(ref(db, `names/${i}`), name);
+    }
+
+    function saveHeader(j) {
+      const eventName = document.getElementById(`event-${j}`).value;
+      set(ref(db, `events/${j}`), eventName);
+    }
+
+    function saveNotice() {
+      const text = document.getElementById("notice").value;
+      set(ref(db, `notice`), text);
+    }
+
+    // リアルタイム取得
+    for (let i = 0; i < 30; i++) {
+      onValue(ref(db, `names/${i}`), (snapshot) => {
+        if (snapshot.exists()) {
+          document.getElementById(`name-${i}`).value = snapshot.val();
+        }
+      });
+
+      for (let j = 0; j < 10; j++) {
+        onValue(ref(db, `attendance/${i}/${j}`), (snapshot) => {
+          if (snapshot.exists()) {
+            document.getElementById(`cell-${i}-${j}`).value = snapshot.val();
+          }
+        });
+      }
+    }
+
+    for (let j = 0; j < 10; j++) {
+      onValue(ref(db, `events/${j}`), (snapshot) => {
+        if (snapshot.exists()) {
+          document.getElementById(`event-${j}`).value = snapshot.val();
+        }
+      });
+    }
+
+    onValue(ref(db, `notice`), (snapshot) => {
+      if (snapshot.exists()) {
+        document.getElementById("notice").value = snapshot.val();
+      }
+    });
+  </script>
+</body>
+</html>
