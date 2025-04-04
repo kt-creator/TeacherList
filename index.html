@@ -10,68 +10,60 @@
       padding: 10px;
       font-family: sans-serif;
     }
-
     table {
       border-collapse: collapse;
       min-width: 800px;
     }
-
     th, td {
       border: 1px solid #000;
       padding: 6px;
       text-align: center;
       white-space: nowrap;
     }
-
-    select {
+    input, select {
       font-size: 16px;
+      width: 100%;
+      box-sizing: border-box;
       color: black;
+      text-align: center;
     }
-
     .fixed-name {
       position: sticky;
       left: 0;
       background: #fff;
       z-index: 1;
     }
-
     .table-container {
       overflow-x: auto;
       width: 100%;
     }
-
     .controls {
       margin: 10px 0;
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
     }
-
     #noticeArea {
       margin: 20px 0;
       padding: 10px;
       border: 1px solid #ccc;
       background: #f9f9f9;
     }
-
     #noticeText {
       width: 100%;
       height: 100px;
       font-size: 18px;
     }
-
     @media (max-width: 768px) {
-      th, td, select {
+      th, td, select, input {
         font-size: 14px;
         padding: 4px;
       }
-
       #noticeText {
         font-size: 16px;
         height: 80px;
       }
     }
-
     @media print {
       button, input, textarea, select {
         display: none;
@@ -106,6 +98,18 @@
       db.ref(`attendance/${name}/${event}`).set(value);
     }
 
+    function saveName(index) {
+      const newName = document.getElementById(`name-input-${index}`).value;
+      names[index] = newName;
+      renderTable(); // 再描画で保存名を反映
+    }
+
+    function saveEvent(index) {
+      const newEvent = document.getElementById(`event-input-${index}`).value;
+      events[index] = newEvent;
+      renderTable(); // 再描画で保存名を反映
+    }
+
     function loadFromFirebase() {
       db.ref("attendance").on("value", snapshot => {
         const data = snapshot.val() || {};
@@ -120,14 +124,19 @@
       const theadRow = document.getElementById("headerRow");
       theadRow.innerHTML = '<th class="fixed-name">名前</th>';
       events.forEach((event, i) => {
-        theadRow.innerHTML += `<th>${event}<br>○:<span id="countYes${i}">0</span> ✖:<span id="countNo${i}">0</span></th>`;
+        theadRow.innerHTML += `<th>
+          <input id="event-input-${i}" value="${event}" onchange="saveEvent(${i})" />
+          <br>○:<span id="countYes${i}">0</span> ✕:<span id="countNo${i}">0</span>
+        </th>`;
       });
 
       const tbody = document.querySelector("tbody");
       tbody.innerHTML = "";
 
-      names.forEach(name => {
-        let row = `<tr><td class="fixed-name">${name}</td>`;
+      names.forEach((name, i) => {
+        let row = `<tr><td class="fixed-name">
+            <input id="name-input-${i}" value="${name}" onchange="saveName(${i})" />
+          </td>`;
         events.forEach((event, j) => {
           const cellId = `${name}_${event}`;
           const value = attendanceData[name]?.[event] || "";
@@ -173,32 +182,25 @@
     function filterNames() {
       const selected = document.getElementById("filterName").value;
       document.querySelectorAll("tbody tr").forEach(row => {
-        const name = row.cells[0].textContent;
+        const name = row.querySelector("input")?.value;
         row.style.display = (!selected || name === selected) ? "" : "none";
       });
     }
 
     function addName() {
-      const newName = prompt("追加する教員名を入力してください");
-      if (newName && !names.includes(newName)) {
-        names.push(newName);
-        attendanceData[newName] = {};
-        renderTable();
-      }
+      names.push(`教員${names.length + 1}`);
+      renderTable();
     }
 
     function addEvent() {
-      const newEvent = prompt("追加するイベント名を入力してください");
-      if (newEvent && !events.includes(newEvent)) {
-        events.push(newEvent);
-        renderTable();
-      }
+      events.push(`イベント${events.length + 1}`);
+      renderTable();
     }
 
     function downloadExcel() {
       const wsData = [["名前", ...events]];
       document.querySelectorAll("tbody tr").forEach(row => {
-        const rowData = [row.cells[0].textContent];
+        const rowData = [row.cells[0].querySelector("input")?.value || ""];
         for (let i = 1; i < row.cells.length; i++) {
           const val = row.cells[i].querySelector("select")?.value || "";
           rowData.push(val);
