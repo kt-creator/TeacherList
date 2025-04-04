@@ -1,3 +1,5 @@
+三角集計追加
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -121,35 +123,38 @@
     }
 
     function renderTable() {
-      const theadRow = document.getElementById("headerRow");
-      theadRow.innerHTML = '<th class="fixed-name">名前</th>';
-      events.forEach((event, i) => {
-        theadRow.innerHTML += `<th>
-          <input id="event-input-${i}" value="${event}" onchange="saveEvent(${i})" />
-          <br>○:<span id="countYes${i}">0</span> ✕:<span id="countNo${i}">0</span>
-        </th>`;
-      });
+  const theadRow = document.getElementById("headerRow");
+  theadRow.innerHTML = '<th class="fixed-name">名前</th>';
+  events.forEach((event, i) => {
+    theadRow.innerHTML += `<th>
+      <input id="event-input-${i}" value="${event}" onchange="saveEvent(${i})" />
+      <br>
+      ○:<span id="countYes${i}">0</span>
+      △:<span id="countMaybe${i}">0</span>
+      ✕:<span id="countNo${i}">0</span>
+    </th>`;
+  });
 
-      const tbody = document.querySelector("tbody");
-      tbody.innerHTML = "";
+  const tbody = document.querySelector("tbody");
+  tbody.innerHTML = "";
 
-      names.forEach((name, i) => {
-        let row = `<tr><td class="fixed-name">
-            <input id="name-input-${i}" value="${name}" onchange="saveName(${i})" />
-          </td>`;
-        events.forEach((event, j) => {
-          const cellId = `${name}_${event}`;
-          const value = attendanceData[name]?.[event] || "";
-          row += `<td><select id="${cellId}" onchange="saveToFirebase('${name}', '${event}', this.value); updateCounts();">
-            <option value="" ${value === "" ? "selected" : ""}></option>
-            <option value="○" ${value === "○" ? "selected" : ""}>○</option>
-            <option value="△" ${value === "△" ? "selected" : ""}>△</option>
-            <option value="✕" ${value === "✕" ? "selected" : ""}>✕</option>
-          </select></td>`;
-        });
-        row += '</tr>';
-        tbody.innerHTML += row;
-      });
+  names.forEach((name, i) => {
+    let row = `<tr><td class="fixed-name">
+        <input id="name-input-${i}" value="${name}" onchange="saveName(${i})" />
+      </td>`;
+    events.forEach((event, j) => {
+      const cellId = `${name}_${event}`;
+      const value = attendanceData[name]?.[event] || "";
+      row += `<td><select id="${cellId}" onchange="saveToFirebase('${name}', '${event}', this.value); updateCounts();">
+        <option value="" ${value === "" ? "selected" : ""}></option>
+        <option value="○" ${value === "○" ? "selected" : ""}>○</option>
+        <option value="△" ${value === "△" ? "selected" : ""}>△</option>
+        <option value="✕" ${value === "✕" ? "selected" : ""}>✕</option>
+      </select></td>`;
+    });
+    row += '</tr>';
+    tbody.innerHTML += row;
+  });
 
       updateCounts();
       updateFilterOptions();
