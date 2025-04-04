@@ -1,114 +1,90 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>教員出欠WEB</title>
   <style>
     body {
-      font-family: sans-serif;
       margin: 0;
-      padding: 20px;
-    }
-
-    .table-wrapper {
-      overflow-x: auto;
-      max-width: 100%;
+      padding: 10px;
+      font-family: sans-serif;
     }
 
     table {
       border-collapse: collapse;
-      min-width: 1000px;
+      min-width: 800px;
     }
 
     th, td {
-      border: 1px solid #aaa;
-      padding: 0;
-    }
-
-    th:first-child, td:first-child {
-      position: sticky;
-      left: 0;
-      background: #f9f9f9;
-      z-index: 1;
-    }
-
-    input, select {
-      width: 100%;
-      height: 40px;
-      border: none;
-      box-sizing: border-box;
+      border: 1px solid #000;
+      padding: 6px;
       text-align: center;
-      font-size: 16px;
+      white-space: nowrap;
     }
 
     select {
+      font-size: 16px;
       color: black;
     }
 
-    textarea {
-      width: 100%;
-      height: 60px;
-      box-sizing: border-box;
-      font-size: 16px;
+    .fixed-name {
+      position: sticky;
+      left: 0;
+      background: #fff;
+      z-index: 1;
     }
 
-    .notice {
-      margin-bottom: 20px;
+    .table-container {
+      overflow-x: auto;
+      width: 100%;
+    }
+
+    .controls {
+      margin: 10px 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    #noticeArea {
+      margin: 20px 0;
+      padding: 10px;
+      border: 1px solid #ccc;
+      background: #f9f9f9;
+    }
+
+    #noticeText {
+      width: 100%;
+      height: 100px;
+      font-size: 18px;
+    }
+
+    @media (max-width: 768px) {
+      th, td, select {
+        font-size: 14px;
+        padding: 4px;
+      }
+
+      #noticeText {
+        font-size: 16px;
+        height: 80px;
+      }
     }
 
     @media print {
-      input, select, textarea {
-        border: none;
-      }
-
-      textarea {
-        height: auto;
-      }
-
-      body {
-        padding: 0;
-      }
-
-      .notice {
-        page-break-before: always;
-      }
-
-      button {
+      button, input, textarea, select {
         display: none;
       }
     }
   </style>
-</head>
-<body>
 
-  <h1>教員出欠欄</h1>
+  <!-- Firebase & xlsx -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-database-compat.js"></script>
 
-  <!-- ✅ お知らせ欄をテーブルの上に移動 -->
-  <div class="notice">
-    <h3>お知らせ欄</h3>
-    <textarea id="notice" onchange="saveNotice()"></textarea>
-  </div>
-
-  <!-- ✅ CSVダウンロードボタン -->
-  <button onclick="downloadCSV()">CSVダウンロード</button>
-
-  <!-- ✅ 出欠表 -->
-  <div class="table-wrapper">
-    <table id="attendanceTable">
-      <thead>
-        <tr>
-          <th>名前 \ イベント</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-
-  <!-- ✅ Firebase & Script -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js";
-
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyD9OakYyH-ONyGRvkPbVzxODrg4lyWcKq4",
       authDomain: "teacherlist-dfac5.firebaseapp.com",
@@ -119,125 +95,162 @@
       appId: "1:504608468919:web:a9499106714e9f23c2c232"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-    window.onload = () => {
-      const theadRow = document.querySelector("thead tr");
-      const tbody = document.querySelector("tbody");
+    let names = Array(20).fill("").map((_, i) => `教員${i + 1}`);
+    let events = Array(5).fill("").map((_, i) => `イベント${i + 1}`);
+    const attendanceData = {};
 
-      // イベント名入力欄（横10）
-      for (let j = 0; j < 10; j++) {
-        const th = document.createElement("th");
-        const input = document.createElement("input");
-        input.type = "text";
-        input.id = `event-${j}`;
-        input.onchange = () => saveHeader(j);
-        th.appendChild(input);
-        theadRow.appendChild(th);
+    function saveToFirebase(name, event, value) {
+      db.ref(`attendance/${name}/${event}`).set(value);
+    }
 
-        onValue(ref(db, `events/${j}`), (snapshot) => {
-          if (snapshot.exists()) input.value = snapshot.val();
+    function loadFromFirebase() {
+      db.ref("attendance").on("value", snapshot => {
+        const data = snapshot.val() || {};
+        names.forEach(name => {
+          attendanceData[name] = data[name] || {};
         });
-      }
-
-      // 行を30作成
-      for (let i = 0; i < 30; i++) {
-        const tr = document.createElement("tr");
-        const nameTd = document.createElement("td");
-        const nameInput = document.createElement("input");
-        nameInput.type = "text";
-        nameInput.id = `name-${i}`;
-        nameInput.onchange = () => saveRowName(i);
-        nameTd.appendChild(nameInput);
-        tr.appendChild(nameTd);
-
-        onValue(ref(db, `names/${i}`), (snapshot) => {
-          if (snapshot.exists()) nameInput.value = snapshot.val();
-        });
-
-        for (let j = 0; j < 10; j++) {
-          const td = document.createElement("td");
-          const select = document.createElement("select");
-          select.id = `cell-${i}-${j}`;
-          select.onchange = () => saveCell(i, j);
-
-          ["", "○", "△", "✕"].forEach(val => {
-            const option = document.createElement("option");
-            option.value = val;
-            option.textContent = val;
-            select.appendChild(option);
-          });
-
-          td.appendChild(select);
-          tr.appendChild(td);
-
-          onValue(ref(db, `attendance/${i}/${j}`), (snapshot) => {
-            if (snapshot.exists()) select.value = snapshot.val();
-          });
-        }
-
-        tbody.appendChild(tr);
-      }
-
-      // お知らせ欄読み込み
-      const noticeEl = document.getElementById("notice");
-      onValue(ref(db, "notice"), (snapshot) => {
-        if (snapshot.exists()) noticeEl.value = snapshot.val();
+        renderTable();
       });
-    };
+    }
 
-    // 保存関数
-    window.saveCell = (i, j) => {
-      const val = document.getElementById(`cell-${i}-${j}`).value;
-      set(ref(db, `attendance/${i}/${j}`), val);
-    };
+    function renderTable() {
+      const theadRow = document.getElementById("headerRow");
+      theadRow.innerHTML = '<th class="fixed-name">名前</th>';
+      events.forEach((event, i) => {
+        theadRow.innerHTML += `<th>${event}<br>○:<span id="countYes${i}">0</span> ✖:<span id="countNo${i}">0</span></th>`;
+      });
 
-    window.saveRowName = (i) => {
-      const name = document.getElementById(`name-${i}`).value;
-      set(ref(db, `names/${i}`), name);
-    };
+      const tbody = document.querySelector("tbody");
+      tbody.innerHTML = "";
 
-    window.saveHeader = (j) => {
-      const eventName = document.getElementById(`event-${j}`).value;
-      set(ref(db, `events/${j}`), eventName);
-    };
+      names.forEach(name => {
+        let row = `<tr><td class="fixed-name">${name}</td>`;
+        events.forEach((event, j) => {
+          const cellId = `${name}_${event}`;
+          const value = attendanceData[name]?.[event] || "";
+          row += `<td><select id="${cellId}" onchange="saveToFirebase('${name}', '${event}', this.value); updateCounts();">
+            <option value="" ${value === "" ? "selected" : ""}></option>
+            <option value="○" ${value === "○" ? "selected" : ""}>○</option>
+            <option value="△" ${value === "△" ? "selected" : ""}>△</option>
+            <option value="✕" ${value === "✕" ? "selected" : ""}>✕</option>
+          </select></td>`;
+        });
+        row += '</tr>';
+        tbody.innerHTML += row;
+      });
 
-    window.saveNotice = () => {
-      const text = document.getElementById("notice").value;
-      set(ref(db, `notice`), text);
-    };
+      updateCounts();
+      updateFilterOptions();
+    }
 
-    // ✅ CSV ダウンロード機能
-    window.downloadCSV = () => {
-      let csv = [];
-      let headerRow = ['名前'];
-      for (let j = 0; j < 10; j++) {
-        const event = document.getElementById(`event-${j}`)?.value || `イベント${j + 1}`;
-        headerRow.push(event);
+    function updateCounts() {
+      events.forEach((_, i) => {
+        const selects = document.querySelectorAll(`tbody td:nth-child(${i + 2}) select`);
+        let yes = 0, no = 0;
+        selects.forEach(select => {
+          if (select.value === "○") yes++;
+          if (select.value === "✕") no++;
+        });
+        document.getElementById(`countYes${i}`).textContent = yes;
+        document.getElementById(`countNo${i}`).textContent = no;
+      });
+    }
+
+    function updateFilterOptions() {
+      const filter = document.getElementById("filterName");
+      filter.innerHTML = '<option value="">全員表示</option>';
+      names.forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        filter.appendChild(option);
+      });
+    }
+
+    function filterNames() {
+      const selected = document.getElementById("filterName").value;
+      document.querySelectorAll("tbody tr").forEach(row => {
+        const name = row.cells[0].textContent;
+        row.style.display = (!selected || name === selected) ? "" : "none";
+      });
+    }
+
+    function addName() {
+      const newName = prompt("追加する教員名を入力してください");
+      if (newName && !names.includes(newName)) {
+        names.push(newName);
+        attendanceData[newName] = {};
+        renderTable();
       }
-      csv.push(headerRow.join(','));
+    }
 
-      for (let i = 0; i < 30; i++) {
-        const row = [];
-        const name = document.getElementById(`name-${i}`)?.value || '';
-        row.push(name);
-        for (let j = 0; j < 10; j++) {
-          const val = document.getElementById(`cell-${i}-${j}`)?.value || '';
-          row.push(val);
+    function addEvent() {
+      const newEvent = prompt("追加するイベント名を入力してください");
+      if (newEvent && !events.includes(newEvent)) {
+        events.push(newEvent);
+        renderTable();
+      }
+    }
+
+    function downloadExcel() {
+      const wsData = [["名前", ...events]];
+      document.querySelectorAll("tbody tr").forEach(row => {
+        const rowData = [row.cells[0].textContent];
+        for (let i = 1; i < row.cells.length; i++) {
+          const val = row.cells[i].querySelector("select")?.value || "";
+          rowData.push(val);
         }
-        csv.push(row.join(','));
-      }
+        wsData.push(rowData);
+      });
 
-      const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'attendance.csv';
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    };
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb, ws, "出欠表");
+      XLSX.writeFile(wb, "出欠表.xlsx");
+    }
+
+    function loadNotice() {
+      db.ref("notice").on("value", snapshot => {
+        document.getElementById("noticeText").value = snapshot.val() || "";
+      });
+    }
+
+    function saveNotice() {
+      db.ref("notice").set(document.getElementById("noticeText").value);
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      loadFromFirebase();
+      loadNotice();
+    });
   </script>
+</head>
+<body>
+  <h2>教員出欠WEB</h2>
+
+  <div id="noticeArea">
+    <h3>お知らせ欄</h3>
+    <textarea id="noticeText" placeholder="ここにお知らせを入力"></textarea><br />
+    <button onclick="saveNotice()">保存</button>
+  </div>
+
+  <label for="filterName">名前でフィルター：</label>
+  <select id="filterName" onchange="filterNames()"></select>
+
+  <div class="table-container">
+    <table>
+      <thead><tr id="headerRow"></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="controls">
+    <button onclick="addName()">＋ 教員を追加</button>
+    <button onclick="addEvent()">＋ イベントを追加</button>
+    <button onclick="downloadExcel()">⬇ Excelダウンロード</button>
+  </div>
 </body>
 </html>
