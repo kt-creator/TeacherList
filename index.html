@@ -71,7 +71,6 @@
     }
   </style>
 
-  <!-- Firebase & Excel Export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-database-compat.js"></script>
@@ -90,8 +89,11 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let names = Array(20).fill("").map((_, i) => `教員${i + 1}`);
-    let events = Array(5).fill("").map((_, i) => `イベント${i + 1}`);
+    const DEFAULT_NAME_COUNT = 20;
+    const DEFAULT_EVENT_COUNT = 5;
+
+    let names = Array.from({ length: DEFAULT_NAME_COUNT }, (_, i) => `教員${i + 1}`);
+    let events = Array.from({ length: DEFAULT_EVENT_COUNT }, (_, i) => `イベント${i + 1}`);
     const attendanceData = {};
 
     function saveToFirebase(name, event, value) {
@@ -100,20 +102,20 @@
 
     function saveName(index) {
       const newName = document.getElementById(`name-input-${index}`).value;
-      names[index] = newName;
       db.ref(`names/${index}`).set(newName);
+      names[index] = newName;
       renderTable();
     }
 
     function saveEvent(index) {
       const newEvent = document.getElementById(`event-input-${index}`).value;
-      events[index] = newEvent;
       db.ref(`events/${index}`).set(newEvent);
+      events[index] = newEvent;
       renderTable();
     }
 
     function loadFromFirebase() {
-      // 出欠データ
+      // 出欠
       db.ref("attendance").on("value", snapshot => {
         const data = snapshot.val() || {};
         names.forEach(name => {
@@ -122,20 +124,24 @@
         renderTable();
       });
 
-      // 名前データ
+      // 名前
       db.ref("names").once("value").then(snapshot => {
         const data = snapshot.val();
         if (data) {
-          names = Object.values(data);
+          Object.keys(data).forEach(index => {
+            names[parseInt(index)] = data[index];
+          });
         }
         renderTable();
       });
 
-      // イベントデータ
+      // イベント
       db.ref("events").once("value").then(snapshot => {
         const data = snapshot.val();
         if (data) {
-          events = Object.values(data);
+          Object.keys(data).forEach(index => {
+            events[parseInt(index)] = data[index];
+          });
         }
         renderTable();
       });
@@ -159,8 +165,8 @@
 
       names.forEach((name, i) => {
         let row = `<tr><td class="fixed-name">
-            <input id="name-input-${i}" value="${name}" onchange="saveName(${i})" />
-          </td>`;
+          <input id="name-input-${i}" value="${name}" onchange="saveName(${i})" />
+        </td>`;
         events.forEach((event, j) => {
           const cellId = `${name}_${event}`;
           const value = attendanceData[name]?.[event] || "";
@@ -215,15 +221,17 @@
 
     function addName() {
       const newName = `教員${names.length + 1}`;
+      const index = names.length;
       names.push(newName);
-      db.ref(`names/${names.length - 1}`).set(newName);
+      db.ref(`names/${index}`).set(newName);
       renderTable();
     }
 
     function addEvent() {
       const newEvent = `イベント${events.length + 1}`;
+      const index = events.length;
       events.push(newEvent);
-      db.ref(`events/${events.length - 1}`).set(newEvent);
+      db.ref(`events/${index}`).set(newEvent);
       renderTable();
     }
 
