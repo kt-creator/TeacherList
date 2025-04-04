@@ -4,75 +4,110 @@
   <meta charset="UTF-8">
   <title>教員出欠WEB</title>
   <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      max-width: 100%;
+    }
+
     table {
       border-collapse: collapse;
-      width: 100%;
+      min-width: 1000px;
     }
+
     th, td {
       border: 1px solid #aaa;
-      padding: 5px;
-      text-align: center;
+      padding: 0;
     }
-    input, select, textarea {
+
+    th:first-child, td:first-child {
+      position: sticky;
+      left: 0;
+      background: #f9f9f9;
+      z-index: 1;
+    }
+
+    input, select {
       width: 100%;
+      height: 40px;
+      border: none;
+      box-sizing: border-box;
+      text-align: center;
+      font-size: 16px;
     }
+
+    select {
+      color: black;
+    }
+
     textarea {
+      width: 100%;
       height: 60px;
+      box-sizing: border-box;
+      font-size: 16px;
     }
+
     .notice {
-      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+
+    @media print {
+      input, select, textarea {
+        border: none;
+      }
+
+      textarea {
+        height: auto;
+      }
+
+      body {
+        padding: 0;
+      }
+
+      .notice {
+        page-break-before: always;
+      }
+
+      button {
+        display: none;
+      }
     }
   </style>
 </head>
 <body>
 
-  
   <h1>教員出欠欄</h1>
-  <!-- テーブル全体を横スクロール可能にする -->
-<div style="overflow-x: auto;">
-  <table id="attendanceTable">
-    <thead>
-      <tr>
-        <th>名前 \ イベント</th>
-        <!-- イベント名入力欄 -->
-        <script>
-          for (let j = 0; j < 10; j++) {
-            document.write(`<th><input type="text" id="event-${j}" onchange="saveHeader(${j})"></th>`);
-          }
-        </script>
-      </tr>
-    </thead>
-    <tbody>
-      <script>
-        for (let i = 0; i < 30; i++) {
-          document.write(`<tr><td><input type="text" id="name-${i}" onchange="saveRowName(${i})"></td>`);
-          for (let j = 0; j < 10; j++) {
-            document.write(`
-              <td>
-                <select id="cell-${i}-${j}" onchange="saveCell(${i}, ${j})">
-                  <option value=""></option>
-                  <option value="○">○</option>
-                  <option value="△">△</option>
-                  <option value="✕">✕</option>
-                </select>
-              </td>`);
-          }
-          document.write('</tr>');
-        }
-      </script>
-    </tbody>
-  </table>
-</div>
 
+  <!-- ✅ お知らせ欄をテーブルの上に移動 -->
   <div class="notice">
     <h3>お知らせ欄</h3>
     <textarea id="notice" onchange="saveNotice()"></textarea>
   </div>
 
-  <!-- Firebase 読み込みと初期化 -->
+  <!-- ✅ CSVダウンロードボタン -->
+  <button onclick="downloadCSV()">CSVダウンロード</button>
+
+  <!-- ✅ 出欠表 -->
+  <div class="table-wrapper">
+    <table id="attendanceTable">
+      <thead>
+        <tr>
+          <th>名前 \ イベント</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- ✅ Firebase & Script -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
-    import { getDatabase, ref, set, get, onValue } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyD9OakYyH-ONyGRvkPbVzxODrg4lyWcKq4",
@@ -87,56 +122,122 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    function saveCell(i, j) {
-      const val = document.getElementById(`cell-${i}-${j}`).value;
-      set(ref(db, `attendance/${i}/${j}`), val);
-    }
+    window.onload = () => {
+      const theadRow = document.querySelector("thead tr");
+      const tbody = document.querySelector("tbody");
 
-    function saveRowName(i) {
-      const name = document.getElementById(`name-${i}`).value;
-      set(ref(db, `names/${i}`), name);
-    }
-
-    function saveHeader(j) {
-      const eventName = document.getElementById(`event-${j}`).value;
-      set(ref(db, `events/${j}`), eventName);
-    }
-
-    function saveNotice() {
-      const text = document.getElementById("notice").value;
-      set(ref(db, `notice`), text);
-    }
-
-    // リアルタイム取得
-    for (let i = 0; i < 30; i++) {
-      onValue(ref(db, `names/${i}`), (snapshot) => {
-        if (snapshot.exists()) {
-          document.getElementById(`name-${i}`).value = snapshot.val();
-        }
-      });
-
+      // イベント名入力欄（横10）
       for (let j = 0; j < 10; j++) {
-        onValue(ref(db, `attendance/${i}/${j}`), (snapshot) => {
-          if (snapshot.exists()) {
-            document.getElementById(`cell-${i}-${j}`).value = snapshot.val();
-          }
+        const th = document.createElement("th");
+        const input = document.createElement("input");
+        input.type = "text";
+        input.id = `event-${j}`;
+        input.onchange = () => saveHeader(j);
+        th.appendChild(input);
+        theadRow.appendChild(th);
+
+        onValue(ref(db, `events/${j}`), (snapshot) => {
+          if (snapshot.exists()) input.value = snapshot.val();
         });
       }
-    }
 
-    for (let j = 0; j < 10; j++) {
-      onValue(ref(db, `events/${j}`), (snapshot) => {
-        if (snapshot.exists()) {
-          document.getElementById(`event-${j}`).value = snapshot.val();
+      // 行を30作成
+      for (let i = 0; i < 30; i++) {
+        const tr = document.createElement("tr");
+        const nameTd = document.createElement("td");
+        const nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.id = `name-${i}`;
+        nameInput.onchange = () => saveRowName(i);
+        nameTd.appendChild(nameInput);
+        tr.appendChild(nameTd);
+
+        onValue(ref(db, `names/${i}`), (snapshot) => {
+          if (snapshot.exists()) nameInput.value = snapshot.val();
+        });
+
+        for (let j = 0; j < 10; j++) {
+          const td = document.createElement("td");
+          const select = document.createElement("select");
+          select.id = `cell-${i}-${j}`;
+          select.onchange = () => saveCell(i, j);
+
+          ["", "○", "△", "✕"].forEach(val => {
+            const option = document.createElement("option");
+            option.value = val;
+            option.textContent = val;
+            select.appendChild(option);
+          });
+
+          td.appendChild(select);
+          tr.appendChild(td);
+
+          onValue(ref(db, `attendance/${i}/${j}`), (snapshot) => {
+            if (snapshot.exists()) select.value = snapshot.val();
+          });
         }
-      });
-    }
 
-    onValue(ref(db, `notice`), (snapshot) => {
-      if (snapshot.exists()) {
-        document.getElementById("notice").value = snapshot.val();
+        tbody.appendChild(tr);
       }
-    });
+
+      // お知らせ欄読み込み
+      const noticeEl = document.getElementById("notice");
+      onValue(ref(db, "notice"), (snapshot) => {
+        if (snapshot.exists()) noticeEl.value = snapshot.val();
+      });
+    };
+
+    // 保存関数
+    window.saveCell = (i, j) => {
+      const val = document.getElementById(`cell-${i}-${j}`).value;
+      set(ref(db, `attendance/${i}/${j}`), val);
+    };
+
+    window.saveRowName = (i) => {
+      const name = document.getElementById(`name-${i}`).value;
+      set(ref(db, `names/${i}`), name);
+    };
+
+    window.saveHeader = (j) => {
+      const eventName = document.getElementById(`event-${j}`).value;
+      set(ref(db, `events/${j}`), eventName);
+    };
+
+    window.saveNotice = () => {
+      const text = document.getElementById("notice").value;
+      set(ref(db, `notice`), text);
+    };
+
+    // ✅ CSV ダウンロード機能
+    window.downloadCSV = () => {
+      let csv = [];
+      let headerRow = ['名前'];
+      for (let j = 0; j < 10; j++) {
+        const event = document.getElementById(`event-${j}`)?.value || `イベント${j + 1}`;
+        headerRow.push(event);
+      }
+      csv.push(headerRow.join(','));
+
+      for (let i = 0; i < 30; i++) {
+        const row = [];
+        const name = document.getElementById(`name-${i}`)?.value || '';
+        row.push(name);
+        for (let j = 0; j < 10; j++) {
+          const val = document.getElementById(`cell-${i}-${j}`)?.value || '';
+          row.push(val);
+        }
+        csv.push(row.join(','));
+      }
+
+      const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'attendance.csv';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
   </script>
 </body>
 </html>
