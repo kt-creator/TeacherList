@@ -94,16 +94,25 @@
 
     let names = Array.from({ length: DEFAULT_NAME_COUNT }, (_, i) => `教員${i + 1}`);
     let events = Array.from({ length: DEFAULT_EVENT_COUNT }, (_, i) => `イベント${i + 1}`);
-    const attendanceData = {};
+    let attendanceData = {};
 
     function saveToFirebase(name, event, value) {
       db.ref(`attendance/${name}/${event}`).set(value);
     }
 
     function saveName(index) {
+      const oldName = names[index];
       const newName = document.getElementById(`name-input-${index}`).value;
+      if (oldName === newName) return;
+
+      // 出欠データを移行
+      const oldData = attendanceData[oldName] || {};
+      db.ref(`attendance/${newName}`).set(oldData);
+      db.ref(`attendance/${oldName}`).remove();
+
       db.ref(`names/${index}`).set(newName);
       names[index] = newName;
+
       renderTable();
     }
 
@@ -115,16 +124,11 @@
     }
 
     function loadFromFirebase() {
-      // 出欠
       db.ref("attendance").on("value", snapshot => {
-        const data = snapshot.val() || {};
-        names.forEach(name => {
-          attendanceData[name] = data[name] || {};
-        });
+        attendanceData = snapshot.val() || {};
         renderTable();
       });
 
-      // 名前
       db.ref("names").once("value").then(snapshot => {
         const data = snapshot.val();
         if (data) {
@@ -135,7 +139,6 @@
         renderTable();
       });
 
-      // イベント
       db.ref("events").once("value").then(snapshot => {
         const data = snapshot.val();
         if (data) {
