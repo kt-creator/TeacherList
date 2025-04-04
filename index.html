@@ -71,7 +71,7 @@
     }
   </style>
 
-  <!-- Firebase & xlsx -->
+  <!-- Firebase & Excel Export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-database-compat.js"></script>
@@ -101,16 +101,19 @@
     function saveName(index) {
       const newName = document.getElementById(`name-input-${index}`).value;
       names[index] = newName;
-      renderTable(); // 再描画で保存名を反映
+      db.ref(`names/${index}`).set(newName);
+      renderTable();
     }
 
     function saveEvent(index) {
       const newEvent = document.getElementById(`event-input-${index}`).value;
       events[index] = newEvent;
-      renderTable(); // 再描画で保存名を反映
+      db.ref(`events/${index}`).set(newEvent);
+      renderTable();
     }
 
     function loadFromFirebase() {
+      // 出欠データ
       db.ref("attendance").on("value", snapshot => {
         const data = snapshot.val() || {};
         names.forEach(name => {
@@ -118,41 +121,59 @@
         });
         renderTable();
       });
+
+      // 名前データ
+      db.ref("names").once("value").then(snapshot => {
+        const data = snapshot.val();
+        if (data) {
+          names = Object.values(data);
+        }
+        renderTable();
+      });
+
+      // イベントデータ
+      db.ref("events").once("value").then(snapshot => {
+        const data = snapshot.val();
+        if (data) {
+          events = Object.values(data);
+        }
+        renderTable();
+      });
     }
 
     function renderTable() {
-  const theadRow = document.getElementById("headerRow");
-  theadRow.innerHTML = '<th class="fixed-name">名前</th>';
-  events.forEach((event, i) => {
-    theadRow.innerHTML += `<th>
-      <input id="event-input-${i}" value="${event}" onchange="saveEvent(${i})" />
-      <br>
-      ○:<span id="countYes${i}">0</span>
-      △:<span id="countMaybe${i}">0</span>
-      ✕:<span id="countNo${i}">0</span>
-    </th>`;
-  });
+      const theadRow = document.getElementById("headerRow");
+      theadRow.innerHTML = '<th class="fixed-name">名前</th>';
+      events.forEach((event, i) => {
+        theadRow.innerHTML += `<th>
+          <input id="event-input-${i}" value="${event}" onchange="saveEvent(${i})" />
+          <br>
+          ○:<span id="countYes${i}">0</span>
+          △:<span id="countMaybe${i}">0</span>
+          ✕:<span id="countNo${i}">0</span>
+        </th>`;
+      });
 
-  const tbody = document.querySelector("tbody");
-  tbody.innerHTML = "";
+      const tbody = document.querySelector("tbody");
+      tbody.innerHTML = "";
 
-  names.forEach((name, i) => {
-    let row = `<tr><td class="fixed-name">
-        <input id="name-input-${i}" value="${name}" onchange="saveName(${i})" />
-      </td>`;
-    events.forEach((event, j) => {
-      const cellId = `${name}_${event}`;
-      const value = attendanceData[name]?.[event] || "";
-      row += `<td><select id="${cellId}" onchange="saveToFirebase('${name}', '${event}', this.value); updateCounts();">
-        <option value="" ${value === "" ? "selected" : ""}></option>
-        <option value="○" ${value === "○" ? "selected" : ""}>○</option>
-        <option value="△" ${value === "△" ? "selected" : ""}>△</option>
-        <option value="✕" ${value === "✕" ? "selected" : ""}>✕</option>
-      </select></td>`;
-    });
-    row += '</tr>';
-    tbody.innerHTML += row;
-  });
+      names.forEach((name, i) => {
+        let row = `<tr><td class="fixed-name">
+            <input id="name-input-${i}" value="${name}" onchange="saveName(${i})" />
+          </td>`;
+        events.forEach((event, j) => {
+          const cellId = `${name}_${event}`;
+          const value = attendanceData[name]?.[event] || "";
+          row += `<td><select id="${cellId}" onchange="saveToFirebase('${name}', '${event}', this.value); updateCounts();">
+            <option value="" ${value === "" ? "selected" : ""}></option>
+            <option value="○" ${value === "○" ? "selected" : ""}>○</option>
+            <option value="△" ${value === "△" ? "selected" : ""}>△</option>
+            <option value="✕" ${value === "✕" ? "selected" : ""}>✕</option>
+          </select></td>`;
+        });
+        row += '</tr>';
+        tbody.innerHTML += row;
+      });
 
       updateCounts();
       updateFilterOptions();
@@ -160,16 +181,16 @@
 
     function updateCounts() {
       events.forEach((_, i) => {
-    const selects = document.querySelectorAll(`tbody td:nth-child(${i + 2}) select`);
-    let yes = 0, maybe = 0, no = 0;
-    selects.forEach(select => {
-      if (select.value === "○") yes++;
-      else if (select.value === "△") maybe++;
-      else if (select.value === "✕") no++;
-    });
-    document.getElementById(`countYes${i}`).textContent = yes;
-    document.getElementById(`countMaybe${i}`).textContent = maybe;
-    document.getElementById(`countNo${i}`).textContent = no;
+        const selects = document.querySelectorAll(`tbody td:nth-child(${i + 2}) select`);
+        let yes = 0, maybe = 0, no = 0;
+        selects.forEach(select => {
+          if (select.value === "○") yes++;
+          else if (select.value === "△") maybe++;
+          else if (select.value === "✕") no++;
+        });
+        document.getElementById(`countYes${i}`).textContent = yes;
+        document.getElementById(`countMaybe${i}`).textContent = maybe;
+        document.getElementById(`countNo${i}`).textContent = no;
       });
     }
 
@@ -193,12 +214,16 @@
     }
 
     function addName() {
-      names.push(`教員${names.length + 1}`);
+      const newName = `教員${names.length + 1}`;
+      names.push(newName);
+      db.ref(`names/${names.length - 1}`).set(newName);
       renderTable();
     }
 
     function addEvent() {
-      events.push(`イベント${events.length + 1}`);
+      const newEvent = `イベント${events.length + 1}`;
+      events.push(newEvent);
+      db.ref(`events/${events.length - 1}`).set(newEvent);
       renderTable();
     }
 
