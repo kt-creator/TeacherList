@@ -9,32 +9,37 @@
     table { border-collapse: collapse; min-width: 900px; }
     th, td { border: 1px solid #000; padding: 6px; text-align: center; white-space: nowrap; }
     input, select { font-size: 16px; width: 100%; box-sizing: border-box; color: black; text-align: center; }
-    .fixed-name { position: sticky; left: 0; background: #fff; z-index: 2; min-width: 240px; }
+
+    /* --- 名前セル --- */
+    .fixed-name { position: sticky; left: 0; background: #fff; z-index: 2; min-width: calc(6em + 48px); }
     .name-cell { display:flex; align-items:center; gap:6px; }
     .name-cell .btns { display:flex; flex-direction:column; gap:4px; }
     .name-cell button { width:28px; height:24px; padding:0; }
+    .name-input { width: 6em; }
+
+    /* --- イベント列ヘッダ --- */
     .col-head { display:flex; align-items:center; gap:6px; justify-content:center; }
     .col-head button { width:28px; height:24px; padding:0; }
+    .event-input { width: 7em; }
+
     .table-container { overflow-x: auto; width: 100%; }
     .controls { margin: 10px 0; display: flex; flex-wrap: wrap; gap: 10px; }
     #noticeArea { margin: 20px 0; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; }
     #noticeText { width: 100%; height: 100px; font-size: 18px; }
+
     @media (max-width: 768px) {
       th, td, select, input { font-size: 14px; padding: 4px; }
       #noticeText { font-size: 16px; height: 80px; }
-      .fixed-name { min-width: 210px; }
+      .fixed-name { min-width: calc(6em + 46px); }
     }
     @media print { button, input, textarea, select { display: none; } }
   </style>
 
-  <!-- Excel出力 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <!-- Firebase（互換API） -->
   <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-database-compat.js"></script>
 
   <script>
-    // === Firebase ===
     const firebaseConfig = {
       apiKey: "AIzaSyD9OakYyH-ONyGRvkPbVzxODrg4lyWcKq4",
       authDomain: "teacherlist-dfac5.firebaseapp.com",
@@ -47,18 +52,11 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // === 初期配列 ===
-    const DEFAULT_NAME_COUNT = 20;
-    const DEFAULT_EVENT_COUNT = 5;
-    let names  = Array.from({ length: DEFAULT_NAME_COUNT }, (_, i) => `教員${i + 1}`);
-    let events = Array.from({ length: DEFAULT_EVENT_COUNT }, (_, i) => `イベント${i + 1}`);
+    let names = [];
+    let events = [];
     let attendanceData = {};
-
-    // 列の表示順（events のインデックスを文字列で保持する配列）
-    // 例: ["0","2","1","3",...]
     let eventOrder = [];
 
-    // === 保存系 ===
     function saveToFirebase(name, event, value) {
       db.ref(`attendance/${name}/${event}`).set(value);
     }
@@ -67,15 +65,11 @@
       const oldName = names[index];
       const newName = document.getElementById(`name-input-${index}`).value.trim();
       if (!newName || oldName === newName) return;
-
-      // 出欠データを（名前キーで）移行
       const oldData = attendanceData[oldName] || {};
       db.ref(`attendance/${newName}`).set(oldData);
       db.ref(`attendance/${oldName}`).remove();
-
       db.ref(`names/${index}`).set(newName);
       names[index] = newName;
-
       renderTable();
     }
 
@@ -86,114 +80,87 @@
       renderTable();
     }
 
-    // === 並べ替え：行（名前） ===
     function moveName(index, delta) {
       const j = index + delta;
       if (j < 0 || j >= names.length) return;
-
-      // names の値を入れ替え
       [names[index], names[j]] = [names[j], names[index]];
-
-      // DB上も同様に names/{i} の値だけをスワップ
       const updates = {};
       updates[`names/${index}`] = names[index];
-      updates[`names/${j}`]     = names[j];
+      updates[`names/${j}`] = names[j];
       db.ref().update(updates);
-
       renderTable();
     }
 
-    // === 並べ替え：列（イベント／←→） ===
-    // 表示位置で受け取り、eventOrder をスワップして保存
     function moveEvent(pos, delta) {
-      // 初期化（eventOrder が空なら 0..N-1）
-      if (!eventOrder || !eventOrder.length) {
-        eventOrder = events.map((_, i) => String(i));
-      }
+      if (!eventOrder.length) eventOrder = events.map((_, i) => String(i));
       const newPos = pos + delta;
       if (newPos < 0 || newPos >= eventOrder.length) return;
-
-      const arr = [...eventOrder];
-      [arr[pos], arr[newPos]] = [arr[newPos], arr[pos]];
-      eventOrder = arr;
-      saveEventOrder(arr);
+      [eventOrder[pos], eventOrder[newPos]] = [eventOrder[newPos], eventOrder[pos]];
+      saveEventOrder(eventOrder);
       renderTable();
     }
     function saveEventOrder(arr) {
       db.ref("eventOrder").set(arr.map(String));
     }
 
-    // === 追加（行＝名前） ===
     function addName() {
       const newName = `教員${names.length + 1}`;
-      const index = names.length;
-      names.push(newName);
-      db.ref(`names/${index}`).set(newName);
+      names.unshift(newName);
+      const payload = {};
+      names.forEach((n, i) => payload[i] = n);
+      db.ref("names").set(payload);
       renderTable();
     }
 
-    // === 追加（列＝イベント） ===
+    // ★ 列を先頭に追加（最左）に修正
     function addEvent() {
       const newEvent = `イベント${events.length + 1}`;
       const index = events.length;
       events.push(newEvent);
       db.ref(`events/${index}`).set(newEvent);
 
-      // 表示順にも追加
-      if (!eventOrder || !eventOrder.length) {
+      if (!eventOrder.length) {
         eventOrder = events.map((_, i) => String(i));
       } else {
-        eventOrder.push(String(index));
+        eventOrder.unshift(String(index)); // 先頭に追加
       }
       saveEventOrder(eventOrder);
-
       renderTable();
     }
 
-    // === 読み込み ===
     function loadFromFirebase() {
-      db.ref("attendance").on("value", snapshot => {
-        attendanceData = snapshot.val() || {};
-        renderTable();
-      });
-
-      db.ref("names").on("value", snapshot => {
-        const data = snapshot.val();
-        if (data) {
-          const maxIndex = Math.max(...Object.keys(data).map(k => parseInt(k, 10)));
-          names = Array.from({ length: maxIndex + 1 }, (_, i) => data[i] ?? `教員${i + 1}`);
+      db.ref("attendance").on("value", s => { attendanceData = s.val() || {}; renderTable(); });
+      db.ref("names").on("value", s => {
+        const d = s.val();
+        if (d) {
+          const maxIndex = Math.max(...Object.keys(d).map(k => parseInt(k, 10)));
+          names = Array.from({ length: maxIndex + 1 }, (_, i) => d[i] ?? `教員${i+1}`);
         }
         renderTable();
       });
-
-      db.ref("events").on("value", snapshot => {
-        const data = snapshot.val();
-        if (data) {
-          const maxIndex = Math.max(...Object.keys(data).map(k => parseInt(k, 10)));
-          events = Array.from({ length: maxIndex + 1 }, (_, i) => data[i] ?? `イベント${i + 1}`);
+      db.ref("events").on("value", s => {
+        const d = s.val();
+        if (d) {
+          const maxIndex = Math.max(...Object.keys(d).map(k => parseInt(k, 10)));
+          events = Array.from({ length: maxIndex + 1 }, (_, i) => d[i] ?? `イベント${i+1}`);
         }
         renderTable();
       });
-
-      // 列の表示順（なければ空配列のまま → 自動で 0..N-1 を使う）
-      db.ref("eventOrder").on("value", snapshot => {
-        const data = snapshot.val();
-        eventOrder = Array.isArray(data) ? data.map(String) : [];
+      db.ref("eventOrder").on("value", s => {
+        const d = s.val();
+        eventOrder = Array.isArray(d) ? d.map(String) : [];
         renderTable();
       });
     }
 
-    // === 表示 ===
     function currentEventIndexOrder() {
-      // 表示に使う順序：eventOrder があればそれを、なければ 0..N-1
-      return (eventOrder && eventOrder.length)
+      return eventOrder.length
         ? eventOrder.map(x => parseInt(x, 10)).filter(i => events[i] !== undefined)
         : events.map((_, i) => i);
     }
 
     function renderTable() {
       const order = currentEventIndexOrder();
-
       const theadRow = document.getElementById("headerRow");
       theadRow.innerHTML = '<th class="fixed-name">名前</th>';
       order.forEach((eventIdx, pos) => {
@@ -201,11 +168,11 @@
         theadRow.innerHTML += `
           <th>
             <div class="col-head">
-              <button title="左へ" onclick="moveEvent(${pos}, -1)">←</button>
-              <input id="event-input-${eventIdx}" value="${event}" onchange="saveEvent(${eventIdx})" />
-              <button title="右へ" onclick="moveEvent(${pos}, 1)">→</button>
+              <button onclick="moveEvent(${pos}, -1)">←</button>
+              <input class="event-input" id="event-input-${eventIdx}" value="${event}" onchange="saveEvent(${eventIdx})" />
+              <button onclick="moveEvent(${pos}, 1)">→</button>
             </div>
-            <div style="margin-top:4px">
+            <div>
               ○:<span id="countYes${pos}">0</span>
               △:<span id="countMaybe${pos}">0</span>
               ✕:<span id="countNo${pos}">0</span>
@@ -215,136 +182,117 @@
 
       const tbody = document.querySelector("tbody");
       tbody.innerHTML = "";
-
       names.forEach((name, i) => {
         let row = `<tr><td class="fixed-name">
           <div class="name-cell">
             <div class="btns">
-              <button title="上へ" onclick="moveName(${i}, -1)">↑</button>
-              <button title="下へ" onclick="moveName(${i}, 1)">↓</button>
+              <button onclick="moveName(${i}, -1)">↑</button>
+              <button onclick="moveName(${i}, 1)">↓</button>
             </div>
-            <input id="name-input-${i}" value="${name}" onchange="saveName(${i})" />
+            <input class="name-input" id="name-input-${i}" value="${name}" onchange="saveName(${i})" />
           </div>
         </td>`;
-
         order.forEach((eventIdx) => {
           const event = events[eventIdx] ?? "";
-          const cellId = `${name}_${event}`;
           const value = attendanceData[name]?.[event] || "";
-          row += `<td>
-            <select id="${cellId}"
-                    onchange="saveToFirebase('${name}', '${event}', this.value); updateCounts();">
-              <option value="" ${value === "" ? "selected" : ""}></option>
-              <option value="○" ${value === "○" ? "selected" : ""}>○</option>
-              <option value="△" ${value === "△" ? "selected" : ""}>△</option>
-              <option value="✕" ${value === "✕" ? "selected" : ""}>✕</option>
-            </select>
-          </td>`;
+          row += `<td><select onchange="saveToFirebase('${name}','${event}',this.value); updateCounts();">
+            <option value="" ${value===""?"selected":""}></option>
+            <option value="○" ${value==="○"?"selected":""}>○</option>
+            <option value="△" ${value==="△"?"selected":""}>△</option>
+            <option value="✕" ${value==="✕"?"selected":""}>✕</option>
+          </select></td>`;
         });
         row += '</tr>';
         tbody.innerHTML += row;
       });
-
-      updateCounts();
-      updateFilterOptions();
+      updateCounts(); updateFilterOptions();
     }
 
     function updateCounts() {
       const order = currentEventIndexOrder();
       order.forEach((_, pos) => {
-        const selects = document.querySelectorAll(`tbody td:nth-child(${pos + 2}) select`);
-        let yes = 0, maybe = 0, no = 0;
-        selects.forEach(select => {
-          if (select.value === "○") yes++;
-          else if (select.value === "△") maybe++;
-          else if (select.value === "✕") no++;
+        const selects = document.querySelectorAll(`tbody td:nth-child(${pos+2}) select`);
+        let yes=0, maybe=0, no=0;
+        selects.forEach(sel=>{
+          if(sel.value==="○") yes++;
+          else if(sel.value==="△") maybe++;
+          else if(sel.value==="✕") no++;
         });
-        document.getElementById(`countYes${pos}`).textContent = yes;
-        document.getElementById(`countMaybe${pos}`).textContent = maybe;
-        document.getElementById(`countNo${pos}`).textContent = no;
+        document.getElementById(`countYes${pos}`).textContent=yes;
+        document.getElementById(`countMaybe${pos}`).textContent=maybe;
+        document.getElementById(`countNo${pos}`).textContent=no;
       });
     }
 
-    // === フィルタ ===
     function updateFilterOptions() {
-      const filter = document.getElementById("filterName");
-      const current = filter.value;
-      filter.innerHTML = '<option value="">全員表示</option>';
-      names.forEach(name => {
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        filter.appendChild(option);
+      const filter=document.getElementById("filterName");
+      const current=filter.value;
+      filter.innerHTML='<option value="">全員表示</option>';
+      names.forEach(n=>{
+        const opt=document.createElement("option");
+        opt.value=n; opt.textContent=n;
+        filter.appendChild(opt);
       });
-      if (current) filter.value = current;
+      if(current) filter.value=current;
     }
-
     function filterNames() {
-      const selected = document.getElementById("filterName").value;
-      document.querySelectorAll("tbody tr").forEach(row => {
-        const name = row.querySelector("input")?.value;
-        row.style.display = (!selected || name === selected) ? "" : "none";
+      const selected=document.getElementById("filterName").value;
+      document.querySelectorAll("tbody tr").forEach(r=>{
+        const name=r.querySelector("input")?.value;
+        r.style.display=(!selected||name===selected)?"":"none";
       });
     }
 
-    // === Excel出力 ===
     function downloadExcel() {
-      const order = currentEventIndexOrder();
-      const headerEvents = order.map(i => events[i] ?? "");
-      const wsData = [["名前", ...headerEvents]];
-      document.querySelectorAll("tbody tr").forEach(row => {
-        const rowData = [row.cells[0].querySelector("input")?.value || ""];
-        for (let i = 1; i < row.cells.length; i++) {
-          const val = row.cells[i].querySelector("select")?.value || "";
+      const order=currentEventIndexOrder();
+      const headerEvents=order.map(i=>events[i]??"");
+      const wsData=[["名前",...headerEvents]];
+      document.querySelectorAll("tbody tr").forEach(row=>{
+        const rowData=[row.cells[0].querySelector("input")?.value||""];
+        for(let i=1;i<row.cells.length;i++){
+          const val=row.cells[i].querySelector("select")?.value||"";
           rowData.push(val);
         }
         wsData.push(rowData);
       });
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      XLSX.utils.book_append_sheet(wb, ws, "出欠表");
-      XLSX.writeFile(wb, "出欠表.xlsx");
+      const wb=XLSX.utils.book_new();
+      const ws=XLSX.utils.aoa_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb,ws,"出欠表");
+      XLSX.writeFile(wb,"出欠表.xlsx");
     }
 
-    // === お知らせ ===
     function loadNotice() {
-      db.ref("notice").on("value", snapshot => {
-        document.getElementById("noticeText").value = snapshot.val() || "";
+      db.ref("notice").on("value", s=>{
+        document.getElementById("noticeText").value=s.val()||"";
       });
     }
     function saveNotice() {
       db.ref("notice").set(document.getElementById("noticeText").value);
     }
 
-    // === 起動 ===
-    window.addEventListener("DOMContentLoaded", () => {
-      loadFromFirebase();
-      loadNotice();
+    window.addEventListener("DOMContentLoaded",()=>{
+      loadFromFirebase(); loadNotice();
     });
   </script>
 </head>
 <body>
   <h2>教員出欠WEB</h2>
-
   <div id="noticeArea">
     <h3>お知らせ欄</h3>
     <textarea id="noticeText" placeholder="ここにお知らせを入力"></textarea><br />
     <button onclick="saveNotice()">保存</button>
   </div>
-
   <label for="filterName">名前でフィルター：</label>
   <select id="filterName" onchange="filterNames()"></select>
-
   <div class="table-container">
     <table>
       <thead><tr id="headerRow"></tr></thead>
       <tbody></tbody>
     </table>
   </div>
-
   <div class="controls">
-    <button onclick="addName()">＋ 教員を追加（行）</button>
-    <button onclick="addEvent()">＋ イベントを追加（列）</button>
+    <button onclick="addName()">＋ 教員を追加（先頭行）</button>
+    <button onclick="addEvent()">＋ イベントを追加（先頭列）</button>
     <button onclick="downloadExcel()">⬇ Excelダウンロード</button>
   </div>
 </body>
